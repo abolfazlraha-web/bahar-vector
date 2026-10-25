@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bahar Leather Pattern Studio</title>
+<style>
+:root{font-family:system-ui,Segoe UI,Arial,sans-serif;color:#173d2d;background:#f2f5f0}
+*{box-sizing:border-box}body{margin:0;padding:24px}header{max-width:1200px;margin:0 auto 18px}
+h1{margin:0 0 6px;font-size:clamp(24px,4vw,36px)}p{line-height:1.5}
+.app{max-width:1200px;margin:auto;display:grid;grid-template-columns:280px 1fr;gap:18px}
+.panel,.preview{background:white;border:1px solid #d8e2d8;border-radius:14px;padding:18px}
+label{display:block;font-size:14px;font-weight:650;margin:14px 0 5px}
+input{width:100%;padding:10px;border:1px solid #b8cabb;border-radius:8px;font:inherit}
+button{border:0;border-radius:9px;padding:11px 14px;font:inherit;font-weight:700;cursor:pointer}
+.primary{background:#1c543b;color:white}.secondary{background:#e5eee7;color:#173d2d}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.note{font-size:12px;color:#5b6f62}.canvas{min-height:420px;overflow:auto;border:1px dashed #c5d5c8;border-radius:10px;background:#fbfcfa}
+svg{display:block;max-width:100%;height:auto;margin:auto}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:12px 0}
+.swatch{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:5px}
+@media(max-width:760px){body{padding:12px}.app{grid-template-columns:1fr}.canvas{min-height:300px}}
+</style>
+</head>
+<body>
+<header>
+<h1>Bahar Leather Pattern Studio</h1>
+<p>Early geometry prototype · dimensions in millimetres · SVG export for review in LightBurn</p>
+</header>
+<main class="app">
+<section class="panel">
+<h2>Pattern dimensions</h2>
+<label for="width">Body width (mm)</label><input id="width" type="number" min="40" max="800" value="260">
+<label for="height">Body height (mm)</label><input id="height" type="number" min="40" max="800" value="180">
+<label for="gusset">Gusset depth (mm)</label><input id="gusset" type="number" min="10" max="300" value="70">
+<label for="allowance">Seam allowance (mm)</label><input id="allowance" type="number" min="0" max="30" step="0.5" value="8">
+<label for="stitch">Stitch line offset (mm)</label><input id="stitch" type="number" min="1" max="25" step="0.5" value="4">
+<label for="spacing">Hole spacing (mm)</label><input id="spacing" type="number" min="2" max="20" step="0.5" value="5">
+<div class="actions"><button class="primary" id="update">Update preview</button><button class="secondary" id="export">Export SVG</button></div>
+<p class="note">Prototype only. Print on paper and verify scale before cutting leather. Curved corners, zipper paths and production seam matching are not implemented yet.</p>
+</section>
+<section class="preview">
+<h2>Preview</h2>
+<div class="legend"><span><i class="swatch" style="background:#173d2d"></i>Cut outline</span><span><i class="swatch" style="background:#c08b43"></i>Stitch guide / hole marks</span></div>
+<div class="canvas" id="canvas" aria-label="Pattern preview"></div>
+<p id="status" class="note" role="status"></p>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let currentSvg='';
+function num(id){return Number($(id).value)}
+function makePattern(){
+ const w=num('width'),h=num('height'),g=num('gusset'),a=num('allowance'),s=num('stitch'),sp=num('spacing');
+ if([w,h,g,a,s,sp].some(v=>!Number.isFinite(v))||w<40||h<40||g<10||a<0||s<1||sp<2){$('status').textContent='Check the values: body width/height must be at least 40 mm, gusset at least 10 mm, and hole spacing at least 2 mm.';return}
+ const margin=16, gap=24, panelW=w+2*a, panelH=h+2*a, sideH=h+2*a, sideW=g+2*a, baseW=w+2*a, baseH=g+2*a;
+ const x1=margin,y1=margin,x2=x1+panelW+gap,x3=x2+panelW+gap,x4=margin,y4=y1+panelH+gap,x5=x4+sideW+gap;
+ const totalW=Math.max(x3+panelW+margin,x5+baseW+margin), totalH=y4+sideH+baseH+gap+margin;
+ const parts=[];
+ function rect(x,y,pw,ph,label){
+   parts.push('<rect x="'+x+'" y="'+y+'" width="'+pw+'" height="'+ph+'" fill="none" stroke="#173d2d" stroke-width="0.6"/>');
+   parts.push('<text x="'+(x+pw/2)+'" y="'+(y+ph/2)+'" text-anchor="middle" font-size="5" fill="#173d2d">'+label+'</text>');
+   const inset=Math.min(s,pw/4,ph/4);
+   if(pw>2*inset&&ph>2*inset){
+    parts.push('<rect x="'+(x+inset)+'" y="'+(y+inset)+'" width="'+(pw-2*inset)+'" height="'+(ph-2*inset)+'" fill="none" stroke="#c08b43" stroke-width="0.35" stroke-dasharray="2 1.5"/>');
+    const n=Math.max(1,Math.floor((pw-2*inset)/sp));
+    for(let i=0;i<=n;i++){let hx=x+inset+i*(pw-2*inset)/n;parts.push('<circle cx="'+hx.toFixed(3)+'" cy="'+(y+inset).toFixed(3)+'" r="0.65" fill="#c08b43"/>');parts.push('<circle cx="'+hx.toFixed(3)+'" cy="'+(y+ph-inset).toFixed(3)+'" r="0.65" fill="#c08b43"/>')}
+    const m=Math.max(1,Math.floor((ph-2*inset)/sp));
+    for(let i=1;i<m;i++){let hy=y+inset+i*(ph-2*inset)/m;parts.push('<circle cx="'+(x+inset).toFixed(3)+'" cy="'+hy.toFixed(3)+'" r="0.65" fill="#c08b43"/>');parts.push('<circle cx="'+(x+pw-inset).toFixed(3)+'" cy="'+hy.toFixed(3)+'" r="0.65" fill="#c08b43"/>')}
+   }
+ }
+ rect(x1,y1,panelW,panelH,'Front panel');
+ rect(x2,y1,panelW,panelH,'Back panel');
+ rect(x3,y1,sideW,sideH,'Side gusset 1');
+ rect(x1,y4,sideW,sideH,'Side gusset 2');
+ rect(x5,y4,baseW,baseH,'Base');
+ currentSvg='<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'mm" height="'+totalH+'mm" viewBox="0 0 '+totalW+' '+totalH+'"><title>Bahar Leather pattern prototype</title><desc>Units in millimetres. Confirm scale before cutting.</desc>'+parts.join('')+'</svg>';
+ $('canvas').innerHTML=currentSvg;
+ $('status').textContent='Preview generated. SVG physical size: '+totalW.toFixed(1)+' × '+totalH.toFixed(1)+' mm. Hole marks are a basic guide and are not yet matched seam-by-seam.';
+}
+$('update').addEventListener('click',makePattern);
+$('export').addEventListener('click',()=>{if(!currentSvg)makePattern();if(!currentSvg)return;const blob=new Blob([currentSvg],{type:'image/svg+xml;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='bahar-leather-pattern.svg';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)});
+makePattern();
+</script>
+</body>
+</html>
